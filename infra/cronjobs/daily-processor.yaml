@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-processor
+  namespace: selin
+  labels:
+    app: daily-processor
+    component: batch-job
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: daily-processor
+            image: selin/daily-processor:latest
+            env:
+            - name: POSTGRES_HOST
+              value: "postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "selin"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: selin-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: selin-secrets
+                  key: postgres-password
+            - name: WEAVIATE_HOST
+              value: "weaviate"
+            - name: WEAVIATE_PORT
+              value: "8080"
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+            command:
+            - "/app/daily-processor"
+            args:
+            - "--aggregation-mode=daily"
+            - "--cleanup-old-data=true"
+            - "--generate-summaries=true"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1

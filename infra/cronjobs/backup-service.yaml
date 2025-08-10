@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-service
+  namespace: selin
+  labels:
+    app: backup-service
+    component: batch-job
+spec:
+  schedule: "0 4 * * *"  # Daily at 4 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup-service
+            image: selin/backup-service:latest
+            env:
+            - name: POSTGRES_HOST
+              value: "postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "selin"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: selin-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: selin-secrets
+                  key: postgres-password
+            - name: WEAVIATE_HOST
+              value: "weaviate"
+            - name: WEAVIATE_PORT
+              value: "8080"
+            - name: BACKUP_RETENTION_DAYS
+              value: "30"
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+            command:
+            - "/app/backup-service"
+            args:
+            - "--backup-postgres=true"
+            - "--backup-weaviate=true"
+            - "--cleanup-old-backups=true"
+            volumeMounts:
+            - name: backup-volume
+              mountPath: /app/backups
+          volumes:
+          - name: backup-volume
+            persistentVolumeClaim:
+              claimName: selin-nfs-pvc
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3

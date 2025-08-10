@@ -1,0 +1,65 @@
+# Data Sources Configuration for Selin
+# This file controls what content sources are collected and how frequently
+
+reddit:
+  enabled: true
+  subreddits:
+    - golang
+    - cosmosdev
+    - cryptography
+    - programming
+    - kubernetes
+    - tendermint
+    - celestia
+  keywords:
+    - "blockchain"
+    - "cosmos"
+    - "tendermint"
+    - "celestia"
+    - "modular blockchain"
+    - "golang"
+    - "go programming"
+    - "cryptography"
+  collection_interval: "5m"
+  max_posts_per_run: 50
+  score_threshold: 10
+
+twitter:
+  enabled: true
+  hashtags:
+    - "#cosmos"
+    - "#celestia"
+    - "#golang"
+    - "#blockchain"
+    - "#cryptography"
+  accounts:
+    - "cosmos"
+    - "CelestiaOrg"
+    - "golang"
+  collection_interval: "10m"
+  max_tweets_per_run: 100
+  retweet_threshold: 5
+
+github:
+  enabled: true
+  repositories:
+    - "cosmos/cosmos-sdk"
+    - "celestiaorg/celestia-core"
+    - "celestiaorg/celestia-app"
+    - "golang/go"
+    - "tendermint/tendermint"
+  collection_interval: "30m"
+  track_releases: true
+  track_issues: true
+  track_prs: true
+
+file_sources:
+  enabled: true
+  watch_directories:
+    - "/app/user/documents"
+    - "/app/user/notes"
+  supported_formats:
+    - "*.md"
+    - "*.pdf"
+    - "*.txt"
+  scan_interval: "1m"

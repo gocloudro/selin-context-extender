@@ -1,0 +1,126 @@
+# Kubernetes Deployment Template for Selin Services
+# This template can be used to create new microservices
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .ServiceName }}"
+  namespace: selin
+  labels:
+    app: "{{ .ServiceName }}"
+    component: "{{ .Component }}"  # data-collection, processing, api, etc.
+    version: "{{ .Version }}"
+spec:
+  replicas: {{ .Replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: "{{ .ServiceName }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ .ServiceName }}"
+        component: "{{ .Component }}"
+        version: "{{ .Version }}"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .MetricsPort | default 9090 }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: "{{ .ServiceName }}"
+        image: "selin/{{ .ServiceName }}:{{ .Version }}"
+        ports:
+        - containerPort: {{ .ServicePort | default 8080 }}
+          name: http
+        - containerPort: {{ .MetricsPort | default 9090 }}
+          name: metrics
+        env:
+        # Common environment variables
+        - name: SERVICE_NAME
+          value: "{{ .ServiceName }}"
+        - name: SERVICE_VERSION
+          value: "{{ .Version }}"
+        - name: LOG_LEVEL
+          value: "{{ .LogLevel | default "info" }}"
+        - name: POSTGRES_HOST
+          value: "postgresql"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "selin"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: selin-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: selin-secrets
+              key: postgres-password
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: WEAVIATE_HOST
+          value: "weaviate"
+        - name: WEAVIATE_PORT
+          value: "8080"
+        {{- range .ExtraEnvVars }}
+        - name: "{{ .Name }}"
+          value: "{{ .Value }}"
+        {{- end }}
+        resources:
+          requests:
+            memory: "{{ .MemoryRequest | default "64Mi" }}"
+            cpu: "{{ .CPURequest | default "50m" }}"
+          limits:
+            memory: "{{ .MemoryLimit | default "256Mi" }}"
+            cpu: "{{ .CPULimit | default "500m" }}"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .ServicePort | default 8080 }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: {{ .ServicePort | default 8080 }}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        {{- if .ConfigMaps }}
+        volumeMounts:
+        {{- range .ConfigMaps }}
+        - name: "{{ .Name }}-volume"
+          mountPath: "{{ .MountPath }}"
+          readOnly: true
+        {{- end }}
+        {{- end }}
+      {{- if .ConfigMaps }}
+      volumes:
+      {{- range .ConfigMaps }}
+      - name: "{{ .Name }}-volume"
+        configMap:
+          name: "{{ .Name }}"
+      {{- end }}
+      {{- end }}
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ .ServiceName }}"
+  namespace: selin
+  labels:
+    app: "{{ .ServiceName }}"
+    component: "{{ .Component }}"
+spec:
+  type: ClusterIP
+  ports:
+  - port: {{ .ServicePort | default 8080 }}
+    targetPort: {{ .ServicePort | default 8080 }}
+    protocol: TCP
+    name: http
+  selector:
+    app: "{{ .ServiceName }}"

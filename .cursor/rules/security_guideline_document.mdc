@@ -1,0 +1,167 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+# Selin Implementation Plan
+Below is a multi-phase, week-by-week plan that balances feature delivery, security, and reliability. Each phase includes key tasks, security checkpoints, and success criteria. Adjust timelines as needed.
+
+---
+
+## Phase 1 (Weeks 1–3): Foundation & Essentials
+
+### Objectives
+• Stand up core infrastructure on the dedicated server.  
+• Implement the File Watcher service and a minimal MCP Server with health endpoints.  
+• Establish GitOps, secrets management, and monitoring basics.
+
+### Tasks
+1. Infrastructure Provisioning
+   - Deploy Weaviate, PostgreSQL, Redis, NFS on dedicated server.  
+   - Harden OS (disable unused services, patch to latest).  
+   - Configure TLS certificates (Let’s Encrypt or internal CA).  
+2. GitOps & CI/CD Setup
+   - Bootstrap ArgoCD with `infrastructure/` and `services/` repos.  
+   - Define Kustomize overlays (dev/prod).  
+3. Secrets Management
+   - Install Sealed-Secrets controller.  
+   - Create initial Kubernetes Secrets (database credentials, CA certs).  
+4. File Watcher Service
+   - Scaffold Go service with `go mod`, Dockerfile (ARM64).  
+   - Implement folder‐watching logic, YAML/Markdown parsing.  
+   - Expose `/health`, `/ready`, `/metrics` endpoints.  
+   - Add structured logging, error wrapping, unit tests (~80% coverage).  
+   - Enforce resource limits (64Mi–128Mi RAM, 50m–100m CPU).  
+5. Minimal MCP Server
+   - Scaffold Claude-integration HTTP server.  
+   - Implement a “ping” endpoint for testing.  
+   - Add CBOR/JSON schema validation on inbound requests.  
+6. Monitoring & Alerting
+   - Configure Prometheus scrape targets.  
+   - Deploy Grafana with basic dashboards (service health, NFS usage).  
+   - Set up Alertmanager for service‐down alerts.  
+
+### Security Checkpoints
+- Validate TLS everywhere (Ingress & service‐to‐service).  
+- Least‐privilege RBAC for K8s ServiceAccounts.  
+- Run vulnerability scan on container images.  
+
+### Success Criteria
+- All core infra pods are running, TLS verified.  
+- File Watcher and MCP ping respond in <100ms.  
+- GitOps deploys updates automatically.  
+
+---
+
+## Phase 2 (Weeks 4–6): Core Data Ingestion & Processing
+
+### Objectives
+• Build GitHub Collector, Content Processor, vector generation pipeline.  
+• Integrate OpenAI embeddings.  
+• Implement server‐side input validation and error handling.  
+
+### Tasks
+1. GitHub Collector
+   - Use Go‐GitHub client with rate limiter (120 RPM).  
+   - Implement allow‐list of repos; validate config with JSON Schema.  
+   - Store raw JSON metadata to PostgreSQL (parameterized queries).  
+2. Content Processor
+   - Clean/normalize Markdown, extract metadata.  
+   - Sanitize HTML fragments.  
+   - Implement unit tests for edge‐case inputs.  
+3. Vector Generator
+   - Wrap OpenAI embeddings API with retries/backoff.  
+   - Validate response signatures (exp, token usage).  
+   - Store vectors in Weaviate via its REST API (TLS).  
+4. Configuration Hot-Reloading
+   - Watch `user/config/*.yaml`; reload on SIGHUP.  
+   - Validate against Go structs + `go-playground/validator`.  
+5. Security & Resilience
+   - Add circuit breakers (e.g., `sony/gobreaker`) for external calls.  
+   - Enforce  JWT authentication on internal endpoints.  
+
+### Security Checkpoints
+- Verify no secrets are logged.  
+- Confirm role‐based access on Postgres users (read/write only as needed).  
+- Run chaos test: simulate database outage, ensure graceful degradation.  
+
+### Success Criteria
+- GitHub Collector ingests commits at scheduled intervals.  
+- Vectors appear in Weaviate and are queryable.  
+- No failed YAML parsing in 95% of runs.
+
+---
+
+## Phase 3 (Weeks 7–10): Social Collectors & Advanced Analysis
+
+### Objectives
+• Deploy Reddit & Twitter collectors with robust rate limiting.  
+• Implement Code Analyzer (Go AST) and Concept Mapper.  
+
+### Tasks
+1. Reddit & Twitter Collectors
+   - Configure API credentials via Sealed Secrets.  
+   - Enforce allow‐list of subreddits/hashtags.  
+   - Use backoff on 429s, log metrics to Prometheus.  
+2. Code Analyzer
+   - Parse Go code repositories using `go/ast` + `golangci-lint`.  
+   - Extract functions, types, dependencies; store metadata in Postgres.  
+3. Concept Mapper
+   - Use NLP to tag blockchain/crypto concepts.  
+   - Integrate a custom embedding‐based classifier.  
+4. Real-time Updates
+   - Launch WebSocket service for push notifications.  
+   - Secure with JWT + CORS allow‐list.  
+
+### Security Checkpoints
+- Validate Reddit/Twitter payloads to prevent injection.  
+- Sanitize all user‐facing responses with context-aware encoding.  
+- Audit permissions on WebSocket channel subscriptions.  
+
+### Success Criteria
+- Collectors run at configured schedules with <1% API errors.  
+- Code Analyzer covers 100% of target repos.  
+- Concept Mapper F1-score ≥ 0.85 on test set.
+
+---
+
+## Phase 4 (Weeks 11+): Batch Jobs, Observability, & Hardening
+
+### Objectives
+• Finalize cron jobs, backups, retention policies.  
+• Complete monitoring, logging, and security hardening.  
+
+### Tasks
+1. Batch CronJobs
+   - Daily Aggregator (2 AM), Weekly Reports (3 AM), Backups (4 AM).  
+   - Ensure jobs have pod security policies, resource limits.  
+2. Backup & Retention
+   - Back up Postgres to NFS + S3 once daily; test restore.  
+   - Implement retention (configurable via `preferences.yaml`).  
+3. Full Observability
+   - Finalize Grafana dashboards (collector success, RPi utilization).  
+   - Configure Loki and Promtail for structured log queries.  
+   - Add Grafana alerts (e.g., high error rate, RPi node down).  
+4. Security Hardening
+   - Rotate secrets; review Sealed Secrets audit logs.  
+   - Perform penetration test on REST API Gateway.  
+   - Ensure CSP, HSTS, Secure & HttpOnly cookies on any endpoints.  
+5. Documentation & Handoff
+   - Write GoDoc for all public packages.  
+   - Prepare runbook: incident response, backup restore, onboarding.  
+
+### Security Checkpoints
+- Verify TLS 1.2+ cipher suites only.  
+- Confirm no debug flags or verbose errors in prod.  
+- Conduct dependency vulnerability scan (SCA tool).  
+
+### Success Criteria
+- All services maintain ≥ 95% uptime under load.  
+- Backup restores pass integrity checks.  
+- No critical/high CVEs in dependencies.
+
+---
+
+By following this plan, you’ll build Selin iteratively with security, observability, and reliability baked in. Let me know if you’d like deeper dives into any component or security practice!

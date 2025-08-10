@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reddit-collector
+  namespace: selin
+  labels:
+    app: reddit-collector
+    component: data-collection
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reddit-collector
+  template:
+    metadata:
+      labels:
+        app: reddit-collector
+        component: data-collection
+    spec:
+      containers:
+      - name: reddit-collector
+        image: selin/reddit-collector:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: REDDIT_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: selin-secrets
+              key: reddit-client-id
+        - name: REDDIT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: selin-secrets
+              key: reddit-client-secret
+        - name: POSTGRES_HOST
+          value: "postgresql"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "selin"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: selin-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: selin-secrets
+              key: postgres-password
+        - name: WEAVIATE_HOST
+          value: "weaviate"
+        - name: WEAVIATE_PORT
+          value: "8080"
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: selin-secrets
+              key: openai-api-key
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config-volume
+        configMap:
+          name: reddit-collector-config
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reddit-collector
+  namespace: selin
+  labels:
+    app: reddit-collector
+    component: data-collection
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: reddit-collector
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reddit-collector-config
+  namespace: selin
+data:
+  sources.yaml: |
+    reddit:
+      subreddits:
+        - golang
+        - cosmosdev
+        - cryptography
+        - programming
+        - kubernetes
+      filters:
+        - "blockchain"
+        - "cosmos"
+        - "tendermint"
+        - "celestia"
+        - "modular blockchain"
+      collection_interval: "5m"
+      max_posts_per_run: 50
+      score_threshold: 10

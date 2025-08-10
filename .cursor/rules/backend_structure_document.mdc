@@ -1,0 +1,211 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+# Backend Structure Document
+
+## 1. Backend Architecture
+
+We’ve built a hybrid system that splits responsibilities between a powerful dedicated server and a swarm of ARM64 nodes. This design keeps things fast, reliable, and easy to grow.
+
+• **Hybrid Deployment**
+  - Dedicated server for heavyweight components (vector database, SQL, cache, file storage)
+  - K3s cluster (20 Raspberry Pi 4 nodes) running Go microservices
+
+• **Microservices Pattern**
+  - Each job lives in its own service (collectors, processors, API, batch jobs)
+  - Services talk over HTTP/REST or WebSockets
+  - Each service follows Go best practices: `/health`, `/ready`, `/metrics`, graceful shutdown, structured logs
+
+• **Scalability**
+  - Add more Pi nodes or beefier servers when load grows
+  - K3s scheduling ensures pods land on the least busy node
+  - Weaviate vector DB and PostgreSQL can scale vertically on the dedicated server
+
+• **Maintainability**
+  - Clear separation: ingestion, processing, API, batch jobs, monitoring
+  - GitOps (ArgoCD + Kustomize) drives deployments from Git
+  - Standardized config loading and hot-reloading keep code clean
+
+• **Performance**
+  - ARM64-optimized Go binaries (Go 1.22+)
+  - Redis for fast rate-limiting and transient caching
+  - NFS share for large file processing without duplicating data
+
+## 2. Database Management
+
+We use three data stores to fit different needs:
+
+• **Weaviate (Vector Database)**
+  - Stores high-dimensional embeddings for semantic search
+  - Deployed as a container on the dedicated server
+  - Backed by local SSD for fast I/O
+
+• **PostgreSQL (SQL Database)**
+  - Holds all metadata about ingested content
+  - Supports complex queries, indexing on timestamps, tags, relevance
+  - Data is retained indefinitely unless manually purged via admin API
+
+• **Redis (In-Memory Cache)**
+  - Implements rate-limiting (60 requests/minute per user, 120 for internal)
+  - Holds transient job states, locks for batch jobs, short-term session data
+
+**Data Management Practices**
+
+- TLS everywhere: all connections are encrypted in transit
+- Backups: daily PostgreSQL dumps and monthly full Weaviate snapshots
+- Data retention: configurable via admin UI or YAML settings
+
+## 3. Database Schema
+
+### PostgreSQL Schema (human-readable + SQL)
+
+We store each piece of content’s metadata in one main table:
+
+Fields:
+- **id**: Unique identifier (UUID)
+- **source_url**: Original link to the content
+- **author**: Who created it (string)
+- **timestamp**: When it was published
+- **tags**: List of topic tags
+- **content_type**: e.g. "article", "code snippet", "PDF"
+- **collection_date**: When we fetched it
+- **source_platform**: "reddit", "twitter", "github", "filesystem"
+- **language**: Content language code (e.g. "en")
+- **content_summary**: AI-generated short description
+- **relevance_score**: 0.0–1.0 score from vector search
+
+Example SQL to create this table:
+
+```sql
+CREATE TABLE content_metadata (
+  id UUID PRIMARY KEY,
+  source_url TEXT NOT NULL,
+  author TEXT,
+  timestamp TIMESTAMP WITH TIME ZONE,
+  tags TEXT[],
+  content_type TEXT,
+  collection_date TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  source_platform TEXT,
+  language TEXT,
+  content_summary TEXT,
+  relevance_score REAL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+```  
+
+We also have the built-in Kubernetes secrets and config maps for service credentials, so no other persistent tables are required for users or roles (single-user scenario).
+
+## 4. API Design and Endpoints
+
+We use a RESTful gateway and a WebSocket service to let clients talk to the backend.
+
+• **REST API Gateway** (Go service)
+  - **GET /api/v1/content**: List or search content (filters: tags, date, relevance)
+  - **GET /api/v1/content/{id}**: Fetch full content and metadata
+  - **POST /api/v1/query**: Ask a question; routes to Claude via MCP
+  - **GET /api/v1/learning-path**: Generate or retrieve custom learning path
+  - **POST /api/v1/admin/purge**: (Admin only) Purge old data based on params
+
+• **WebSocket Service**
+  - **/ws/updates**: Push real-time notifications (new content available, job status)
+
+• **Health & Metrics**
+  - **GET /health**: Returns OK if service is up
+  - **GET /ready**: Returns OK if service is ready to serve traffic
+  - **GET /metrics**: Exposes Prometheus metrics in text format
+
+Rate limiting is enforced at the gateway using Redis.
+
+## 5. Hosting Solutions
+
+• **Dedicated Server**
+  - Hosts Weaviate, PostgreSQL, Redis, NFS
+  - High-performance NVMe SSD and ample CPU/RAM
+  - Provides stable central storage and vector search
+
+• **Raspberry Pi 4 K3s Cluster**
+  - 20 ARM64 nodes running Go microservices
+  - Low cost, energy-efficient, and easy to expand by adding more Pi units
+  - K3s lightweight Kubernetes distribution keeps overhead minimal
+
+Benefits:
+- **Reliability**: Dedicated server handles core data; cluster handles compute
+- **Scalability**: Scale Pi nodes horizontally; beef up server as needed
+- **Cost-effectiveness**: Pis are inexpensive; only one high-end server
+
+## 6. Infrastructure Components
+
+• **Load Balancer**
+  - K3s uses MetalLB for service IPs and load balancing across Pi nodes
+
+• **Caching Mechanisms**
+  - Redis for API rate-limits and short-term job caching
+  - Local in-memory caches inside services for hot data
+
+• **Content Delivery**
+  - NFS share on the dedicated server provides large file access to all nodes
+
+• **CI/CD & GitOps**
+  - ArgoCD watches Git repos and applies Kustomize manifests
+  - Ensures declarative, version-controlled deployments
+
+• **CronJobs**
+  - Daily Processor, Weekly Analyzer, Backup Service run as Kubernetes CronJobs
+
+## 7. Security Measures
+
+• **Encryption**
+  - TLS for every service-to-service and client-to-service connection
+
+• **Authentication & Authorization**
+  - API key or token-based auth for the single user
+  - Kubernetes RBAC restricts access inside the cluster
+
+• **Secrets Management**
+  - Kubernetes Secrets to store API keys and database credentials
+  - Sealed Secrets ensure safe GitOps storage
+
+• **Rate Limiting**
+  - Enforced in Redis at 60 requests/minute per user on public APIs
+
+• **Network Policies**
+  - K3s network policies limit which pods can talk to which services
+
+## 8. Monitoring and Maintenance
+
+• **Metrics Collection**
+  - Prometheus scrapes `/metrics` from all services and K3s nodes
+
+• **Visualization & Alerting**
+  - Grafana dashboards for CPU, memory, request latency, queue lengths
+  - Alertmanager + Grafana Alerts notify on failures or threshold breaches
+
+• **Logging**
+  - Loki + Promtail capture structured logs from all pods
+  - Centralized log search for debugging and audits
+
+• **Health Monitoring**
+  - Custom Health Monitor service checks critical endpoints and downstream dependencies
+
+• **Maintenance Strategy**
+  - Rolling updates via ArgoCD keep downtime near zero
+  - Automated backups tested monthly
+  - Dependency updates on a regular schedule, with canary deployments for major changes
+
+## 9. Conclusion and Overall Backend Summary
+
+Our Selin backend blends a powerful dedicated server and a fleet of small ARM64 computers to deliver an AI-driven learning platform that’s fast, resilient, and budget-friendly. We’ve chosen best-of-breed components:
+
+• Go microservices for clean, efficient code  
+• Weaviate for vector search  
+• PostgreSQL for structured metadata  
+• Redis for caching and rate-limiting  
+• K3s + ArgoCD for flexible, declarative deployments  
+• Prometheus, Grafana, Loki for rock-solid observability
+
+Every piece—from data ingestion to API responses—is optimized for performance and maintainability. Strong security controls, full TLS encryption, and clear monitoring ensure we meet our goals for reliability, speed, and continuous learnability. Selin’s backend is therefore well-equipped to grow with user needs and deliver consistently excellent AI-powered insights into Golang, blockchain, and cryptographic mathematics.

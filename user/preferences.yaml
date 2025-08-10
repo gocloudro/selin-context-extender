@@ -1,0 +1,55 @@
+# User Preferences Configuration for Selin
+# This file controls learning preferences, filtering, and personalization
+
+learning_focus:
+  primary_topics:
+    - "golang"
+    - "blockchain"
+    - "cosmos_ecosystem"
+    - "cryptography"
+    - "kubernetes"
+  skill_level:
+    golang: "intermediate"
+    blockchain: "beginner"
+    cryptography: "beginner"
+    kubernetes: "intermediate"
+  learning_goals:
+    - "Master Go concurrency patterns"
+    - "Understand Cosmos SDK architecture"
+    - "Learn zero-knowledge proofs"
+    - "Build production-ready microservices"
+
+content_filtering:
+  relevance_threshold: 0.7
+  exclude_languages:
+    - "javascript"  # Focus on Go, not JS
+  exclude_keywords:
+    - "cryptocurrency trading"
+    - "price prediction"
+    - "investment advice"
+  priority_keywords:
+    - "consensus algorithm"
+    - "proof of stake"
+    - "interoperability"
+    - "state machine"
+    - "merkle tree"
+
+interaction_preferences:
+  response_style: "detailed"  # concise, balanced, detailed
+  include_code_examples: true
+  include_references: true
+  max_response_length: 2000
+  streaming_enabled: true
+
+data_retention:
+  reddit_posts: "3 months"
+  twitter_posts: "1 month"
+  github_content: "6 months"
+  personal_files: "indefinite"
+  learning_progress: "indefinite"
+
+notifications:
+  new_relevant_content: true
+  learning_milestones: true
+  weekly_summary: true
+  system_alerts: true

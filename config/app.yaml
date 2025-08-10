@@ -1,0 +1,71 @@
+# Selin Application Configuration
+# This file contains the main application settings
+
+server:
+  api_gateway_port: 8080
+  websocket_port: 8081
+  timeout: 30s
+  max_connections: 1000
+
+database:
+  postgres:
+    host: localhost
+    port: 5433
+    database: selin
+    max_connections: 20
+    ssl_mode: disable
+  
+  redis:
+    host: localhost
+    port: 6379
+    db: 0
+    max_idle: 10
+    max_active: 50
+  
+  weaviate:
+    host: localhost
+    port: 8080
+    scheme: http
+
+rate_limiting:
+  user_requests_per_minute: 60
+  collector_requests_per_minute: 120
+  burst_size: 10
+
+logging:
+  level: info  # debug, info, warn, error
+  format: json
+  file: logs/selin.log
+
+monitoring:
+  enabled: true
+  metrics_port: 9090
+  health_check_interval: 30s
+
+ai_services:
+  openai:
+    model: text-embedding-ada-002
+    max_tokens: 8192
+    temperature: 0.7
+  
+  claude:
+    model: claude-3-sonnet-20240229
+    max_tokens: 4096
+    temperature: 0.5
+
+content_processing:
+  batch_size: 100
+  max_file_size_mb: 50
+  supported_formats:
+    - markdown
+    - pdf
+    - txt
+    - json
+    - slack_export
+
+security:
+  jwt_secret_env: JWT_SECRET
+  api_key_env: API_KEY
+  cors_origins:
+    - http://localhost:3000
+    - http://localhost:8080

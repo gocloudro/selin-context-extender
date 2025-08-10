@@ -1,0 +1,193 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+# Project Requirements Document (PRD)
+
+## 1. Project Overview
+
+Selin is a personal AI-powered knowledge management and learning assistant focused on Golang, blockchain development (Cosmos/Celestia), and cryptographic mathematics. It continuously ingests content from Reddit, Twitter, GitHub, Markdown/PDF files, and other sources you configure, then transforms it into semantic vectors and structured metadata. When you ask a question, Selin combines relevant snippets, feeds them to Claude AI, and streams back contextualized answers and learning suggestions through a REST/WebSocket API.
+
+This system solves the problem of scattered technical information by centralizing, analyzing, and personalizing it for one learner. Key objectives are fast query responses (<100 ms), high reliability (>95% processing success), and low resource usage (<50% CPU on Raspberry Pi nodes). Success is measured by responsiveness, completeness of learning coverage, and system uptime.
+
+## 2. In-Scope vs. Out-of-Scope
+
+**In-Scope (v1):**
+
+*   Single-user setup with one account and token-based authentication.
+*   Content collectors: Reddit, Twitter, GitHub, local Markdown/PDF files.
+*   Data storage: Weaviate for vectors, PostgreSQL for metadata, Redis for rate-limiting.
+*   Core pipelines: cleaning, embedding (OpenAI), Go AST parsing, concept mapping.
+*   MCP gateway to Claude AI via REST + WebSocket streaming.
+*   Configurable ingestion schedules, sources, retention rules via `user/` directory (.yaml).
+*   ARM64-optimized microservices on Raspberry Pi cluster (K3s).
+*   Observability: Prometheus/Grafana metrics, Loki/Promtail logs, Alertmanager.
+*   Security: TLS everywhere, Kubernetes Secrets + Sealed Secrets, rate limiting (60 rpm user, 120 rpm collectors).
+*   GitOps deployment with Kustomize + ArgoCD.
+
+**Out-of-Scope (later phases):**
+
+*   Multi-tenant or team accounts with roles and permissions.
+*   User interface beyond raw API/CLI (no web dashboard or mobile app).
+*   Third-party integrations beyond configurable sources (e.g., Slack, Discord) until explicitly added.
+*   Advanced analytics dashboards or export formats (Excel, PDF).
+*   Automatic scaling beyond Raspberry Pi cluster and single dedicated server.
+
+## 3. User Flow
+
+When the single user wants to learn or explore a topic, they send a natural-language prompt in a JSON payload to the REST API gateway using their API token from Kubernetes Secrets. The gateway checks the token, enforces a 60 requests/minute limit (via Redis), and rejects excess requests with HTTP 429 errors.
+
+If allowed, the gateway routes the request to one of the MCP Server instances running in the Raspberry Pi cluster. The MCP Server generates an embedding via OpenAI, queries Weaviate for matching content vectors, fetches associated metadata from PostgreSQL, and builds a structured prompt for Claude AI. Claude’s streamed response is relayed back over WebSocket so the user sees real-time reasoning. Once complete, the interaction is logged in PostgreSQL and any user preferences or learning progress updates are written to the `user/preferences.yaml` file (version-controlled via ArgoCD). Background jobs then adjust future recommendations by re-mapping concepts and regenerating vectors.
+
+## 4. Core Features
+
+*   **Authentication & Rate Limiting**
+
+    *   Single‐user token via Kubernetes Secrets
+    *   60 requests/minute per user, 120 requests/minute per collector
+
+*   **Multi-Source Ingestion**
+
+    *   Reddit (specified subreddits)
+    *   Twitter (hashtags or handles)
+    *   GitHub (repositories)
+    *   Local file watcher for Markdown/PDF
+
+*   **Content Processing Pipeline**
+
+    *   Text normalization, Markdown cleaning
+    *   OpenAI embedding generation
+    *   Go code analysis using AST parsing
+    *   Concept mapping for blockchain and crypto math
+
+*   **Claude AI Integration**
+
+    *   MCP gateway for question answering and learning path generation
+    *   REST endpoint + WebSocket streaming
+
+*   **Configurable Learning Paths**
+
+    *   `user/config/sources.yaml`, `schedules.yaml`, `preferences.yaml`, custom templates
+    *   Hot-reloading without code changes
+
+*   **ARM64-Optimized Deployment**
+
+    *   Go 1.22+ with `GOARCH=arm64` builds
+    *   Resource limits: 64–512 MiB RAM, 50–500 m CPU
+    *   K3s cluster on Raspberry Pi 4
+
+*   **Observability & Alerting**
+
+    *   Prometheus metrics, Grafana dashboards
+    *   Loki+Promtail for logs
+    *   Alertmanager + Grafana Alerts
+
+*   **Security & Compliance**
+
+    *   TLS for all in-transit data
+    *   Kubernetes Secrets + Sealed Secrets for credentials
+    *   Graceful shutdown, health/readiness endpoints
+
+*   **Data Retention & Archiving**
+
+    *   Default: keep indefinitely
+    *   User-defined rules (e.g., Twitter: 1 week, Reddit: 1 month)
+
+## 5. Tech Stack & Tools
+
+*   **Language & Runtimes**
+
+    *   Go 1.22+ (ARM64 optimized)
+
+*   **Databases & Caching**
+
+    *   Weaviate (vector DB)
+    *   PostgreSQL (metadata)
+    *   Redis (rate-limiting)
+
+*   **Container & Orchestration**
+
+    *   K3s (lightweight Kubernetes)
+    *   NFS for shared storage
+    *   Kustomize + ArgoCD (GitOps)
+
+*   **AI & Embeddings**
+
+    *   Claude AI via MCP server
+    *   OpenAI embeddings API
+
+*   **Observability**
+
+    *   Prometheus + Grafana
+    *   Loki + Promtail
+    *   Alertmanager + Grafana Alerts
+
+*   **Security & Secrets**
+
+    *   TLS everywhere
+    *   Kubernetes Secrets + Sealed Secrets
+
+*   **IDE & Plugins**
+
+    *   Cursor (AI-powered coding assistant)
+
+## 6. Non-Functional Requirements
+
+*   **Performance**
+
+    *   Query response <100 ms (excluding external API calls)
+    *   ≤50% average CPU usage on Raspberry Pi cluster
+
+*   **Reliability**
+
+    *   ≥95% success rate for content ingestion and processing
+    *   <1% API failure rate
+
+*   **Scalability**
+
+    *   Support 20 Raspberry Pi nodes with horizontal scaling of MCP Server
+
+*   **Security**
+
+    *   TLS for all service-to-service and external communications
+    *   Secrets never stored unencrypted in Git
+
+*   **Usability**
+
+    *   Simple YAML files under `user/` for all customizations
+    *   Clear health (`/health`), readiness (`/ready`), and metrics (`/metrics`) endpoints
+
+## 7. Constraints & Assumptions
+
+*   **Single-User**: Only one authenticated user account; no multi-tenant support initially.
+*   **Rate Limits**: 60 rpm per user for queries; 120 rpm per collector service.
+*   **ARM64 Availability**: Raspberry Pi 4 cluster must run ARM64 binaries; Go must support this.
+*   **Claude & OpenAI**: APIs are available and within quota.
+*   **Network**: Stable connectivity between dedicated server and Pi cluster; TLS certificates provisioned.
+
+## 8. Known Issues & Potential Pitfalls
+
+*   **API Rate Limits**: External APIs (Reddit, Twitter, GitHub) may throttle.
+
+    *   Mitigation: Exponential backoff, jitter, collector queuing.
+
+*   **Raspberry Pi Resource Constraints**
+
+    *   Mitigation: Strict resource limits, monitor node health, scale collectors.
+
+*   **Network Partitions** between server and cluster
+
+    *   Mitigation: Health checks, retry logic, fallback to cached data.
+
+*   **Weaviate/Vector DB Growth**
+
+    *   Mitigation: Implement archiving or pruning policies via user-defined retention.
+
+*   **Hot-Reload Race Conditions** when updating YAML configs
+
+    *   Mitigation: Locking during reload, atomic config swaps.
+
+This PRD provides a clear, unambiguous blueprint of Selin’s first version—covering scope, user flow, features, tech stack, and non-functional requirements—so that the AI model (and future technical documents) can proceed without guesswork.

@@ -1,0 +1,142 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+## Project Overview
+
+*   **Type:** Personal AI Knowledge Management System
+*   **Description:** Selin is a Go-based, AI-powered knowledge management and learning system for Golang, blockchain (Cosmos/Celestia), and cryptography. It ingests multi-source data, processes it via microservices on a K3s cluster, and delivers insights through Claude AI.
+*   **Primary Goal:** Build Selin to ingest, process, and semantically search learning materials, then generate personalized learning paths using Claude AI.
+
+## Project Structure
+
+### Framework-Specific Routing
+
+*   **Directory Rules:**
+
+    *   "Go HTTP Server (Go 1.22)": define routes in `cmd/<service>/routes.go` using Chi or Gorilla Mux
+    *   Example 1: API Gateway (Go 1.22) → `cmd/api_gateway/main.go` + `internal/api_gateway/router.go`
+    *   Example 2: WebSocket Service (Go 1.22) → `cmd/ws_service/main.go` + `internal/ws_service/routes.go`
+    *   Example 3: MCP Server (Go 1.22) → `cmd/mcp_server/main.go` + `internal/mcp_server/routes.go`
+
+### Core Directories
+
+*   **Versioned Structure:**
+
+    *   `cmd/` : Service entrypoints using Go 1.22 modules
+    *   `internal/` : Private application code per service
+    *   `pkg/` : Public reusable libraries (e.g., client wrappers)
+    *   `user/config/` : Overridable YAML/JSON settings (hot-reload)
+    *   `user/credentials/` : User-provided credential files
+    *   `user/templates/` : Ingestion templates for PDF, Markdown, code
+    *   `k8s/` : Kustomize overlays and base definitions
+
+### Key Files
+
+*   **Stack-Versioned Patterns:**
+
+    *   `cmd/<service>/main.go` : Go 1.22 entrypoint with `func main()`
+    *   `config/config.go` : Config loader using Go 1.22 `embed`
+    *   `internal/<service>/handlers.go` : HTTP handlers with Chi router
+    *   `k8s/kustomization.yaml` : Kustomize v5+ definitions for GitOps
+    *   `Dockerfile` : multi-stage build targeting ARM64
+
+## Tech Stack Rules
+
+*   **Version Enforcement:**
+
+    *   Go@1.22+: Enforce `go.mod` with exact versions, require Go modules cache cleanliness
+    *   Weaviate@1.15: Use schema migrations via REST before ingestion
+    *   PostgreSQL@15: Use `pgx` with connection pooling and statement caching
+    *   Redis@7: ACL enabled, TLS required for all connections
+    *   K3s@1.27: All services deployed via Kustomize, no Helm charts
+    *   ClaudeAI@latest: Use MCP gRPC interface, stream responses over WebSocket
+    *   Prometheus@2.50: Scrape every `/metrics` endpoint on port 9090
+    *   Grafana@10: Use unified alerting, no legacy alertmanager UI
+    *   Loki@2.x & Promtail@latest: Use service annotations for log discovery
+
+## PRD Compliance
+
+*   "No UI: No web dashboard or app.": Expose only REST/WebSocket APIs; no frontend code.
+*   "Single User: One account, MCP gateway between database and Claude.": Enforce token-based auth on API Gateway and MCP Server.
+
+## App Flow Integration
+
+*   API Gateway (Go 1.22) → rate limits → MCP Server →
+    • Generate OpenAI embeddings → query Weaviate & PostgreSQL →
+    • Construct prompt → Claude AI via MCP → stream via WebSocket.
+
+## Best Practices
+
+*   Go 1.22+
+    *   Use context.Context for all request lifecycles
+    *   Structured logging (zerolog or logrus) with fields
+    *   Graceful shutdown on SIGTERM with timeouts
+    *   Config hot-reload via fsnotify
+*   Weaviate
+    *   Define strict schemas and migrations
+    *   Use vector dimension checks at startup
+    *   Backup and restore via `weaviate-backup`
+*   PostgreSQL
+    *   Use prepared statements and `pgxpool`
+    *   Enforce schema migrations with `golang-migrate`
+    *   Enable WAL archiving for recovery
+*   Redis
+    *   Use TLS and ACLs for isolation
+    *   Set maxmemory policies for caching
+    *   Monitor keyspace and eviction metrics
+*   K3s/Kubernetes
+    *   Define resource requests/limits for all pods
+    *   Use liveness/readiness probes on `/health` & `/ready`
+    *   Manage secrets with Sealed Secrets
+*   Claude AI / MCP
+    *   Stream tokens to client to reduce latency
+    *   Throttle requests per user as specified
+    *   Validate prompt length and sanitize inputs
+*   Prometheus & Grafana
+    *   Tag metrics by service & instance
+    *   Alert on high error rates & pod restarts
+    *   Dashboards for CPU, memory, request latency
+*   Loki & Promtail
+    *   Use structured log labels for slicing
+    *   Ship logs over gRPC for reliability
+    *   Retain logs per PRD retention policies
+*   ArgoCD & Kustomize
+    *   Use GitOps, no manual kubectl apply
+    *   Namespace isolation per environment
+    *   Automate sync waves for dependent services
+
+## Rules
+
+*   Derive folder/file patterns directly from Go 1.22 module conventions.
+*   Each microservice MUST follow `cmd/<service>` + `internal/<service>` pattern.
+*   Use Kustomize exclusively; do not mix Helm charts.
+*   Enforce TLS for all service-to-service and client connections.
+*   Use Kubernetes Secrets + Sealed Secrets for private data.
+*   All services must expose `/health`, `/ready`, `/metrics`.
+*   No frontend code or UI frameworks allowed.
+
+## Rules Metrics
+
+Before starting the project development, create a metrics file in the root of the project called
+
+`cursor_metrics.md`
+
+### Instructions:
+
+*   Each time a cursor rule is used as context, update `cursor_metrics.md`.
+*   Use the following format for `cursor_metrics.md`:
+
+# Rules Metrics
+
+## Usage
+
+The number of times rules is used as context
+
+*   go-routing.mdc: 0
+*   k3s-deployment.mdc: 0
+*   cli-service-structure.mdc: 0
+*   ...other rules

@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekly-analyzer
+  namespace: selin
+  labels:
+    app: weekly-analyzer
+    component: batch-job
+spec:
+  schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: weekly-analyzer
+            image: selin/weekly-analyzer:latest
+            env:
+            - name: POSTGRES_HOST
+              value: "postgresql"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "selin"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: selin-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: selin-secrets
+                  key: postgres-password
+            - name: WEAVIATE_HOST
+              value: "weaviate"
+            - name: WEAVIATE_PORT
+              value: "8080"
+            - name: CLAUDE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: selin-secrets
+                  key: claude-api-key
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "200m"
+              limits:
+                memory: "1Gi"
+                cpu: "1000m"
+            command:
+            - "/app/weekly-analyzer"
+            args:
+            - "--generate-learning-report=true"
+            - "--update-learning-paths=true"
+            - "--analyze-progress=true"
+            volumeMounts:
+            - name: reports-volume
+              mountPath: /app/reports
+          volumes:
+          - name: reports-volume
+            persistentVolumeClaim:
+              claimName: selin-nfs-pvc
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 2

@@ -1,0 +1,149 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+# Frontend Guideline Document for Selin (CLI)
+
+Selin is a personal AI-powered knowledge system that currently provides no web or mobile user interface. Instead, its “frontend” is a command-line interface (CLI) written in Go. This document explains how to set up, extend, and maintain that CLI so any future developer or user can interact smoothly with the system.
+
+## 1. Frontend Architecture
+
+**Overall Structure**
+- The CLI is a Go application organized around the [spf13/cobra](https://github.com/spf13/cobra) library for commands and [spf13/viper](https://github.com/spf13/viper) for configuration.
+- Directory layout:
+  - `/cmd`: root command and subcommands (collect, process, query, config, etc.)
+  - `/internal/cli`: shared helpers for printing, prompts, color output
+  - `/pkg/client`: HTTP/WS client code for talking to the REST API and WebSocket service
+  - `/pkg/config`: structures and loaders for user config (sources.yaml, preferences.yaml)
+
+**Scalability & Maintainability**
+- New commands are added as separate files under `/cmd`. Cobra auto-wires them at compile time.
+- Shared logic lives in `/internal/cli` and `/pkg`, avoiding duplication.
+- Configuration hot-reloading is supported via Viper, so updates to `user/config/` are picked up without restarting the CLI.
+
+**Performance**
+- Compiled Go binary ensures sub-100 ms startup on modern hardware and <150 ms on Raspberry Pi.
+- Command modules are lightweight; imports are limited to only required packages.
+
+## 2. Design Principles
+
+**Usability**
+- Every command has a clear purpose and name (`selin collect reddit`, `selin query concepts`).
+- Built-in help (`--help`) explains flags, defaults, and examples.
+
+**Accessibility**
+- ANSI color output is optional (`--no-color` flag) for color-blind or screen-reader users.
+- Keyboard-only navigation: no interactive menus—just flags and positional arguments.
+
+**Consistency & Predictability**
+- Verb-noun command pattern: `selin <action> <target>`.
+- Flags follow POSIX conventions (short `-c`, long `--config`).
+
+**Responsiveness**
+- Progress bars and spinners for long tasks, powered by [`briandowns/spinner`](https://github.com/briandowns/spinner).
+- Immediate feedback on success or error, with clear exit codes.
+
+## 3. Styling and Theming
+
+**Styling Approach**
+- ANSI escape codes via [`fatih/color`](https://github.com/fatih/color).
+- Flat, minimal look in the terminal—no ASCII art or heavy borders.
+
+**Color Palette**
+- Info: Blue (#1E90FF)
+- Success: Green (#32CD32)
+- Warning: Yellow (#FFD700)
+- Error: Red (#FF4500)
+- Muted/Labels: Gray (#A9A9A9)
+
+**Fonts**
+- Relies on the user’s terminal font (monospace). No special font embedding.
+
+## 4. Component Structure
+
+**Command Components**
+- Each subcommand is its own Go file under `/cmd`.
+- Shared flag definitions and helper functions live in `/internal/cli/flags.go`.
+
+**Reusability**
+- Common behaviors (logging, color output, error wrapping) are in `/internal/cli/utils.go`.
+- HTTP and WebSocket client code is wrapped in `/pkg/client`, so commands only call high-level functions.
+
+**Benefits**
+- Clear separation of concerns: CLI parsing vs. business logic vs. API calls.
+- Easy to add or remove commands without touching other parts of the codebase.
+
+## 5. State Management
+
+**Configuration Loading**
+- Uses Viper to load YAML files from the `user/config/` directory:
+  - `sources.yaml`, `schedules.yaml`, `preferences.yaml`, etc.
+- Supports environment variables (`SELIN_CONFIG_PATH`) for custom locations.
+
+**Transient State**
+- In-memory only during CLI execution. No local database or caching in the CLI itself.
+- Session tokens and API keys read from Kubernetes-style `.env` files under `user/credentials/`.
+
+## 6. Routing and Navigation
+
+**Cobra Routing**
+- Root command (`selin`) dispatches to subcommands based on the first argument.
+- Each command registers its own flags in an `init()` function.
+
+**Command Hierarchy Example**
+- `selin collect reddit`
+- `selin collect twitter`
+- `selin process content`
+- `selin query run --prompt "list concepts"`
+- `selin config edit sources`
+
+**Help & Discovery**
+- `selin --help` lists top-level commands.
+- `selin collect --help` shows collection targets and flags.
+
+## 7. Performance Optimization
+
+**Lazy Initialization**
+- Cobra commands only import and initialize the client modules they need.
+
+**Binary Size**
+- Strips debug symbols (`-ldflags "-s -w"`) during build for a smaller executable.
+
+**I/O Optimization**
+- Buffered I/O for reading and writing large files.
+- Concurrency where appropriate (e.g., parallel collection of multiple sources).
+
+## 8. Testing and Quality Assurance
+
+**Unit Tests**
+- `*_test.go` files for each command and helper module under `/cmd` and `/internal/cli`.
+- Use Go’s `testing` package and `testify` for assertions.
+
+**Integration Tests**
+- Mock HTTP/WebSocket servers using [`httptest`](https://pkg.go.dev/net/http/httptest).
+- Sample config files in `/testdata` to simulate real user setups.
+
+**End-to-End Tests**
+- Shell scripts or Go programs in `/e2e` that call the binary, check exit codes, and validate output.
+
+**Continuous Integration**
+- GitHub Actions pipeline:
+  1. Lint with `golangci-lint`.
+  2. Run unit tests (`go test ./...`).
+  3. Build binary for Linux/ARM64.
+  4. Run E2E scripts.
+
+## 9. Conclusion and Frontend Summary
+
+Selin’s “frontend” is a lean, Go-based CLI that interfaces with the microservices ecosystem over REST and WebSocket. By following the guidelines above, developers will ensure:
+- A consistent, discoverable command structure
+- Clear theming and color usage without sacrificing accessibility
+- Scalable component architecture for adding new commands or flags
+- Reliable state loading and hot-reloading of user configs
+- Fast startup, lightweight footprint, and responsive feedback
+- Thorough testing at unit, integration, and end-to-end levels
+
+Though there is no web or mobile UI today, these principles set the stage for any future frontend layer. For now, every interaction with Selin remains straightforward, scriptable, and robust through the CLI.

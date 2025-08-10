@@ -1,0 +1,71 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+flowchart LR
+    subgraph Dedicated_Server
+        Weaviate[Weaviate]
+        PostgreSQL[PostgreSQL]
+        Redis[Redis]
+        NFS[NFS]
+    end
+    subgraph K3s_Cluster
+        subgraph Data_Collection
+            RedditCollector[Reddit_Collector]
+            TwitterCollector[Twitter_Collector]
+            GitHubCollector[GitHub_Collector]
+            FileWatcher[File_Watcher]
+            PDFProcessor[PDF_Processor]
+        end
+        subgraph Processing
+            ContentProcessor[Content_Processor]
+            VectorGenerator[Vector_Generator]
+            ConceptMapper[Concept_Mapper]
+            CodeAnalyzer[Code_Analyzer]
+        end
+        subgraph API_Interface
+            MCPServer[MCP_Server]
+            RestAPIGateway[REST_API_Gateway]
+            WebSocketService[WebSocket_Service]
+        end
+        subgraph Batch_Jobs
+            DailyProcessor[Daily_Processor]
+            WeeklyAnalyzer[Weekly_Analyzer]
+            BackupService[Backup_Service]
+        end
+        subgraph Monitoring
+            HealthMonitor[Health_Monitor]
+            LogAggregator[Log_Aggregator]
+            MetricsCollector[Metrics_Collector]
+        end
+    end
+    RedditCollector --> ContentProcessor
+    TwitterCollector --> ContentProcessor
+    GitHubCollector --> ContentProcessor
+    FileWatcher --> ContentProcessor
+    PDFProcessor --> ContentProcessor
+    ContentProcessor --> VectorGenerator
+    VectorGenerator --> Weaviate
+    ContentProcessor --> PostgreSQL
+    ConceptMapper --> VectorGenerator
+    CodeAnalyzer --> PostgreSQL
+    MCPServer --> Weaviate
+    MCPServer --> PostgreSQL
+    RestAPIGateway --> MCPServer
+    WebSocketService --> MCPServer
+    DailyProcessor --> ContentProcessor
+    WeeklyAnalyzer --> ConceptMapper
+    BackupService --> PostgreSQL
+    BackupService --> Weaviate
+    HealthMonitor --> Redis
+    HealthMonitor --> PostgreSQL
+    HealthMonitor --> Weaviate
+    LogAggregator --> Redis
+    LogAggregator --> PostgreSQL
+    LogAggregator --> Weaviate
+    MetricsCollector --> Redis
+    MetricsCollector --> PostgreSQL
+    MetricsCollector --> Weaviate

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: selin-nfs-pv
+  labels:
+    type: nfs
+    app: selin-storage
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: "YOUR_NFS_SERVER_IP"  # Replace with actual NFS server IP
+    path: "/path/to/selin/data"   # Replace with actual NFS path
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-storage
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-storage
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: "YOUR_NFS_SERVER_IP"   # Replace with actual NFS server IP
+  share: "/path/to/selin/data"   # Replace with actual NFS path
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+mountOptions:
+  - hard
+  - nfsvers=4.1

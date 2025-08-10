@@ -1,0 +1,85 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+# Implementation plan
+
+## Phase 1: Environment Setup
+
+1. Prevalidation: In project root, verify presence of `config/`, `credentials/`, `templates/`, `user/` directories. If missing, prompt user to confirm creation (Configuration: all customization via `user/` directory).
+2. Install Go 1.22: Download and install Go for ARM64 from https://golang.org/dl/go1.22.linux-arm64.tar.gz and add to `PATH` (Core Tech Stack: Language).
+3. Validation: Run `go version` and confirm output `go version go1.22 linux/arm64` (Core Tech Stack: Language).
+4. Install kubectl v1.26.3: Download from https://kubernetes.io/releases and place in `/usr/local/bin` (Core Tech Stack: Deployment: Kubernetes).
+5. Install Helm v3.12.0: `curl https://get.helm.sh/helm-v3.12.0-linux-arm64.tar.gz | tar -xz && mv linux-arm64/helm /usr/local/bin/helm` (Core Tech Stack: Deployment: Kubernetes).
+6. Install ArgoCD CLI v2.7.3: `curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/v2.7.3/argocd-linux-arm64` + `chmod +x` (Deployment: GitOps).
+7. Install Cursor CLI: Follow https://cursor.com/docs/cli to install current ARM64 Cursor CLI (Core Tech Stack: IDE: Cursor).
+8. Create Cursor metrics: `mkdir -p .cursor` and `touch .cursor/cursor_metrics.md`; refer to `cursor_project_rules.mdc` for content guidelines (Core Tech Stack: IDE: Cursor).
+9. Scaffold directories: Create `config/`, `credentials/`, `templates/`, and `user/` at project root (Configuration: directory structure).
+
+## Phase 2: API/Interface Implementation
+
+10. Create API Gateway scaffold: Initialize Go module in `/services/api-gateway` with `go mod init selin/api-gateway` and add `main.go` (Architecture: API/Interface).
+11. Implement health/readiness/metrics: In `/services/api-gateway/main.go`, add `/health`, `/ready`, and `/metrics` endpoints using `net/http` and `github.com/prometheus/client_golang/prometheus/promhttp` (Implementation Standards: service requirements).
+12. Integrate Redis rate limiter: In `/services/api-gateway/rate_limiter.go`, implement 60 requests/min per user via `github.com/go-redis/redis/v8` (User Interactions and Data Flow).
+13. Create WebSocket service scaffold: Initialize Go module in `/services/ws` with `go mod init selin/ws` and add `main.go` using `github.com/gorilla/websocket` listening on `/ws` (Architecture: API/Interface).
+14. Validation: Run `go test ./services/api-gateway` and `go test ./services/ws` to ensure unit tests pass (Implementation Standards: unit tests).
+
+## Phase 3: Backend Services & Infrastructure
+
+### 3.1 Infrastructure Services
+
+15. Weaviate Deployment: Create `/infra/weaviate/deployment.yaml` with ARM64 image `semitechnologies/weaviate:latest`, resource limits (CPU: 500m, mem: 1Gi) and Service on port 8080 (Core Tech Stack: Vector DB).
+16. PostgreSQL 15 Deployment: Create `/infra/postgresql/deployment.yaml` using image `postgres:15.3`, mount PVC for data, expose port 5432 (Architecture: Dedicated Server).
+17. Redis Deployment: Create `/infra/redis/deployment.yaml` using image `redis:7.2`, mount PVC for data, expose port 6379 (Core Tech Stack: Cache).
+18. NFS Storage: Create `/infra/nfs/pv.yaml` and `/infra/nfs/pvc.yaml` for NFS server path, mount in Weaviate, PostgreSQL, and Redis (Architecture: Dedicated Server).
+
+### 3.2 Data Collection Services
+
+19. Reddit Collector: Create `/services/reddit-collector/deployment.yaml` for a Go 1.22 container, mount `config/sources.yaml`, set schedule to continuous, subscribe to `r/golang`, `r/cosmosdev`, `r/cryptography` (Services: Data Collection).
+20. Twitter Collector: Create `/services/twitter-collector/deployment.yaml`, Go container mounts `config/sources.yaml`, filters `#cosmos`, `#celestia`, `#golang` (Services: Data Collection).
+21. GitHub Collector: Create `/services/github-collector/deployment.yaml`, Go container mounts `config/sources.yaml`, tracks specified repos (Services: Data Collection).
+22. File Watcher: Create `/services/file-watcher/deployment.yaml`, Go container watches `user/` directory for Markdown/Slack exports (Services: Data Collection).
+23. PDF Processor: Create `/services/pdf-processor/deployment.yaml`, Go container processes PDF files in `user/` (Services: Data Collection).
+
+### 3.3 Processing Services
+
+24. Content Processor: Create `/services/content-processor/deployment.yaml`, Go container cleans/normalizes content, mounts `config/preferences.yaml` (Services: Processing).
+25. Vector Generator: Create `/services/vector-generator/deployment.yaml`, Go container calls OpenAI embeddings using API key in `credentials/.env` (Core Tech Stack: AI Integration).
+26. Concept Mapper: Create `/services/concept-mapper/deployment.yaml`, Go container extracts Go/blockchain concepts (Services: Processing).
+27. Code Analyzer: Create `/services/code-analyzer/deployment.yaml`, Go container performs Go AST parsing (Services: Processing).
+28. MCP Server (Claude): Create `/services/mcp-server/deployment.yaml`, Go container configured via MCP, mount `credentials/.env` with Claude credentials (Core Tech Stack: AI: Claude via MCP).
+
+### 3.4 Batch Jobs
+
+29. Daily Processor CronJob: Create `/infra/cronjobs/daily-processor.yaml` scheduled at `0 2 * * *`, Go job for aggregation (Services: Batch Jobs).
+30. Weekly Analyzer CronJob: Create `/infra/cronjobs/weekly-analyzer.yaml` scheduled at `0 3 * * 0`, Go job for progress reports (Services: Batch Jobs).
+31. Backup Service CronJob: Create `/infra/cronjobs/backup-service.yaml` scheduled at `0 4 * * *`, Go job to backup DB and Weaviate (Services: Batch Jobs).
+
+32. Validation: Run `kubectl apply --dry-run=client -f infra/ -R` to verify all manifests compile (Implementation Standards: validation).
+
+## Phase 4: Integration
+
+33. API Gateway → MCP routing: Update `/services/api-gateway/main.go` to forward `/query` POST to `http://mcp-server:PORT` (User Interactions and Data Flow).
+34. WebSocket integration: In `/services/ws/main.go`, connect to MCP Server’s streaming API and broadcast to clients (App Flow: streaming).
+35. ConfigMaps & Secrets: Create `/infra/configmap.yaml` for `config/` files and `/infra/secret.yaml` (Sealed Secrets) for `credentials/.env` (Configuration: all customization via `user/`).
+36. Ingress & TLS: Create `/infra/ingress.yaml` with TLS certs (e.g., cert-manager), route `api.example.com` and `ws.example.com` to services (Security: TLS Everywhere).
+37. Validation: Execute `curl https://api.example.com/query -d '{"prompt":"Hello"}'` and confirm valid JSON response within 100 ms (Implementation Standards: validation).
+
+## Phase 5: Deployment & Monitoring
+
+38. Kustomize Base: Create `/infra/kustomize/base/kustomization.yaml` referencing all `infra/` and `services/` manifests (Deployment: Kustomize).
+39. Kustomize Overlays: Create `/infra/kustomize/overlays/production/kustomization.yaml` with environment-specific patches (Deployment: Kustomize).
+40. ArgoCD Application: Create `/infra/argocd/selin-app.yaml` pointing to Git repo URL and `overlays/production` (Deployment: ArgoCD GitOps).
+41. Prometheus: Add `/infra/monitoring/prometheus.yaml` with ServiceMonitor for all `/metrics` endpoints (Core Tech Stack: Monitoring).
+42. Grafana: Add `/infra/monitoring/grafana.yaml` with Prometheus data source and dashboards for query latency and RPi utilization (Monitoring: Grafana).
+43. Loki & Promtail: Add `/infra/monitoring/loki.yaml` and `/infra/monitoring/promtail.yaml` to aggregate logs from all pods (Monitoring: Logging).
+44. Alertmanager: Add `/infra/monitoring/alertmanager.yaml` with alerts for CPU > 80% and pod restarts > 5/hour (Monitoring: Alertmanager).
+45. Validation: Run `argocd app diff selin` to ensure cluster state matches Git (Deployment: validation).
+46. RBAC & Sealed Secrets: Create `/infra/rbac/*.yaml` and `/infra/sealed-secrets/*.yaml` encrypting `credentials/.env` (Secrets: Kubernetes Secrets & Sealed Secrets).
+47. SLO/SLI Definitions: Add `/infra/monitoring/slo.yaml` with latency < 100 ms and RPi CPU < 50% (Success Metrics).
+48. Resource Limits: Patch each Deployment in overlays to set CPU/memory requests and limits for ARM64 RPi nodes (Architecture: ARM64 Optimization).
+49. CI Testing Workflow: Create `.github/workflows/ci.yaml` to run `go test`, `golangci-lint`, and Kubernetes manifest validation on PRs (Implementation Standards: unit tests & validation).
+50. CD Workflow: Create `.github/workflows/cd.yaml` to commit Kustomize overlays and trigger ArgoCD sync; post-deployment, monitor Grafana/Alertmanager for 24 h (Deployment: CI/CD & Success Metrics).

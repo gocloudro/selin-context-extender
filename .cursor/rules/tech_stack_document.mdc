@@ -1,0 +1,148 @@
+---
+description: Apply these rules when making changes to the project
+globs:
+alwaysApply: true
+---
+
+Update this rule if user requested changes to the project requirement, etc.
+# Tech Stack Document for Selin – Personal AI Learning System
+
+This document explains in everyday language why each technology was chosen for **Selin**, your personal AI-powered learning companion for Go, blockchain development, and cryptographic mathematics. It covers how these pieces fit together, from user interaction all the way down to data storage and deployment.
+
+## 1. Frontend Technologies
+
+Although Selin does not include a traditional graphical user interface, it provides two simple ways to interact with the system:
+
+- **REST API Gateway**  
+  • Exposes HTTP endpoints that accept and return data in JSON format  
+  • Lets you send questions and receive structured answers using tools like `curl`, Postman, or any HTTP client  
+
+- **WebSocket Service**  
+  • Streams real-time updates and intermediate reasoning steps back to the client  
+  • Gives you immediate feedback as the AI processes your request
+
+These choices keep things lightweight and flexible—any client that speaks HTTP or WebSocket can become your “front end.”
+
+## 2. Backend Technologies
+
+All of Selin’s core logic runs in small, focused Go services. Here’s what’s under the hood:
+
+- **Go 1.22+ (ARM64 optimized)**  
+  • Fast, statically compiled language that runs efficiently on Raspberry Pi and servers  
+  • Clear patterns for configuration, logging, and graceful shutdown  
+
+- **Microservices on K3s (Lightweight Kubernetes)**  
+  • 20× Raspberry Pi 4 nodes for edge processing  
+  • Dedicated server for heavier components  
+
+- **Vector Database: Weaviate**  
+  • Stores document embeddings for semantic search  
+  • Lets Selin find the most relevant content snippets quickly  
+
+- **Relational Database: PostgreSQL**  
+  • Holds structured metadata for every piece of content, including:  
+    – Source URL, author, original timestamp  
+    – Tags, content type (Markdown, PDF, tweet)  
+    – Collection date, source platform, language  
+    – Content summary and relevance score  
+
+- **Cache: Redis**  
+  • Enforces rate limits (60 requests/minute per user, 120/minute for collectors)  
+  • Handles quick lookups for in-flight requests  
+
+- **NFS Storage**  
+  • Shared file storage for large assets like PDF papers and Markdown notes  
+
+- **Core Services**  
+  • **Collectors**: gather data from Reddit, Twitter, GitHub, local files  
+  • **Processors**: clean text, extract Go code structures, generate OpenAI embeddings  
+  • **MCP Server**: integrates with Claude AI to handle user queries  
+
+- **Batch Jobs (CronJobs)**  
+  • Daily aggregation, weekly progress reports, nightly backups  
+
+- **Observability Endpoints**  
+  • Each service provides `/health`, `/ready`, and `/metrics` for monitoring
+
+## 3. Infrastructure and Deployment
+
+Selin’s infrastructure is designed for reliability, scalability, and easy updates:
+
+- **Dedicated Server**  
+  • Runs Weaviate, PostgreSQL, Redis, and NFS  
+
+- **K3s Cluster on Raspberry Pi**  
+  • Hosts Go microservices across multiple nodes  
+
+- **Container Configuration**  
+  • Uses **Kustomize** to templatize all Kubernetes manifests  
+  • Manages secrets with **Kubernetes Secrets** and **Sealed Secrets** (encrypted in Git)  
+
+- **GitOps with ArgoCD**  
+  • Automatically applies any changes pushed to the `user/` directory or infrastructure repo  
+  • Ensures deployments and configuration stay in sync with Git  
+
+- **Version Control**  
+  • All code and configuration in Git, including custom user YAML files  
+
+- **TLS Everywhere**  
+  • Encrypts all communication between services and external APIs
+
+## 4. Third-Party Integrations
+
+Selin relies on a handful of external services to deliver its full feature set:
+
+- **Claude AI via MCP**  
+  • Powers natural language understanding and answer generation  
+
+- **OpenAI Embeddings API**  
+  • Creates vector representations of text for semantic search in Weaviate  
+
+- **Content Sources**  
+  • Reddit API, Twitter API v2, GitHub API  
+  • File system watchers for Obsidian notes and Slack exports  
+
+- **Observability Stack**  
+  • **Prometheus** for metrics collection  
+  • **Grafana** for dashboards  
+  • **Loki + Promtail** for log aggregation  
+  • **Alertmanager + Grafana Alerts** for unified alerting
+
+## 5. Security and Performance Considerations
+
+We’ve built Selin with strong safeguards and optimizations:
+
+- **Authentication & Rate Limiting**  
+  • API Gateway checks a user token stored as a Kubernetes Secret  
+  • Redis enforces 60 requests/minute for user queries, up to 120 requests/minute for collectors  
+
+- **Data Protection**  
+  • TLS encrypts all in-transit data  
+  • PostgreSQL and Weaviate data can be encrypted at rest by underlying disk encryption  
+
+- **Secrets Management**  
+  • Kubernetes Secrets + Sealed Secrets prevent accidental exposure in Git  
+
+- **Resource Constraints**  
+  • Each service declares CPU (50m–500m) and memory (64–512 MiB) limits  
+  • ARM64 builds ensure a small footprint on Raspberry Pi hardware  
+
+- **Graceful Shutdown & Observability**  
+  • Clean shutdown on SIGTERM, structured logs, and error wrapping  
+  • Health checks and metrics ensure quick detection and recovery
+
+- **Data Retention Policies**  
+  • Default: keep all ingested content indefinitely  
+  • Optional per-source rules (e.g., purge Twitter after one week, Reddit after one month)
+
+## 6. Conclusion and Overall Tech Stack Summary
+
+Selin’s technology choices were driven by three goals: **personalization**, **performance**, and **reliability**. By using Go microservices on a hybrid Raspberry Pi + dedicated server setup, a GitOps-driven deployment, and a mix of specialized databases (semantic and relational), Selin can:
+
+- **Serve a single user** with a secure, token-based API  
+- **Learn from diverse content** sources in real time  
+- **Deliver AI-powered insights** via Claude and OpenAI embeddings  
+- **Scale efficiently** on low-power hardware with clear resource limits  
+- **Stay observable and self-healing** with Prometheus, Grafana, Loki, and alerting
+
+Unique features like ARM64 optimization, hot-reloadable user configurations, and semantic search set Selin apart as both a powerful learning tool and a hands-on Go and Kubernetes playground. This stack ensures you can focus on mastering Go, blockchain, and cryptographic math—while Selin takes care of the plumbing.
